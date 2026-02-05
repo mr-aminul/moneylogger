@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useData } from '../contexts/DataContext'
 import { X, Link2 } from 'lucide-react'
 
-export default function ExpenseModal({ transaction, type = 'expense', onClose }) {
+export default function ExpenseModal({ transaction, type = 'expense', onClose, initialTitle = '' }) {
   const { addExpense, addIncome, updateExpense, categoryNames, findMatchingUpcomingForExpense } = useData()
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -27,8 +27,10 @@ export default function ExpenseModal({ transaction, type = 'expense', onClose })
         date: transaction.date || new Date().toISOString().split('T')[0],
         note: transaction.note || '',
       })
+    } else if (initialTitle) {
+      setFormData((prev) => ({ ...prev, title: initialTitle }))
     }
-  }, [transaction, categoryNames])
+  }, [transaction, categoryNames, initialTitle])
 
   const handleSubmit = async (e, linkedRecurringId = null) => {
     e.preventDefault()

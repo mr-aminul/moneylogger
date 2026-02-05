@@ -131,6 +131,7 @@ export function DataProvider({ children }) {
       .from('expenses')
       .select('*')
       .order('date', { ascending: false })
+      .order('created_at', { ascending: false })
     if (error) {
       setDataError(error.message)
       return

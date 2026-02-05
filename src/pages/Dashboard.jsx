@@ -1,17 +1,38 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { useData } from '../contexts/DataContext'
 import { format, startOfMonth, endOfMonth, isWithinInterval, isSameDay } from 'date-fns'
 import { getPeriodRange, formatPeriodLabel, getDaysRemainingInPeriod } from '../lib/period'
 import { TrendingUp, TrendingDown, AlertCircle, DollarSign, Plus, Receipt, Calendar, HelpCircle, X } from 'lucide-react'
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import ExpenseModal from '../components/ExpenseModal'
+import VoiceInputButton from '../components/UI/VoiceInputButton'
 
 const COLORS = ['#64748b', '#34d399', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6']
 
 export default function Dashboard() {
   const [showExpenseModal, setShowExpenseModal] = useState(false)
+  const [voiceTranscript, setVoiceTranscript] = useState('')
   const [showAllowanceExplanation, setShowAllowanceExplanation] = useState(false)
+  const voiceInputRef = useRef(null)
   const { expenses, budgets, recurring, formatCurrency, budgetPeriod } = useData()
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.code !== 'Space' || e.repeat) return
+      const target = document.activeElement
+      const isInput = target && (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.tagName === 'SELECT' ||
+        target.getAttribute?.('contenteditable') === 'true'
+      )
+      if (isInput) return
+      e.preventDefault()
+      voiceInputRef.current?.trigger?.()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
   const currentDate = new Date()
   const { start: periodStart, end: periodEnd } = getPeriodRange(budgetPeriod, currentDate)
   const periodLabel = formatPeriodLabel(budgetPeriod, currentDate)
@@ -178,15 +199,27 @@ export default function Dashboard() {
                 : 'Start tracking your expenses by adding your first one'}
             </p>
           </div>
-          <button
-            onClick={() => setShowExpenseModal(true)}
-            className="group flex items-center gap-3 px-8 py-4 bg-white dark:bg-primary-700 text-primary-900 dark:text-white rounded-xl font-semibold text-lg shadow-xl hover:shadow-2xl hover:scale-105 transition-all duration-200 min-w-[200px] justify-center sm:justify-start"
-          >
-            <div className="w-10 h-10 rounded-full bg-primary-900 dark:bg-primary-800 flex items-center justify-center group-hover:scale-110 transition-transform">
-              <Plus className="w-6 h-6 text-white" />
-            </div>
-            <span>Add Expense</span>
-          </button>
+          <div className="flex items-center gap-3 flex-wrap justify-center sm:justify-start">
+            <button
+              onClick={() => { setVoiceTranscript(''); setShowExpenseModal(true); }}
+              className="group flex items-center gap-3 px-8 py-4 bg-white dark:bg-primary-700 text-primary-900 dark:text-white rounded-xl font-semibold text-lg shadow-xl hover:shadow-2xl hover:scale-105 transition-all duration-200 min-w-[200px] justify-center sm:justify-start"
+            >
+              <div className="w-10 h-10 rounded-full bg-primary-900 dark:bg-primary-800 flex items-center justify-center group-hover:scale-110 transition-transform">
+                <Plus className="w-6 h-6 text-white" />
+              </div>
+              <span>Add Expense</span>
+            </button>
+            <VoiceInputButton
+              ref={voiceInputRef}
+              onOpenWithTranscript={(text) => {
+                setVoiceTranscript(text)
+                setShowExpenseModal(true)
+              }}
+              size="lg"
+              variant="secondary"
+              className="shrink-0"
+            />
+          </div>
         </div>
       </div>
 
@@ -618,7 +651,8 @@ export default function Dashboard() {
         <ExpenseModal
           transaction={null}
           type="expense"
-          onClose={() => setShowExpenseModal(false)}
+          onClose={() => { setShowExpenseModal(false); setVoiceTranscript(''); }}
+          initialTitle={voiceTranscript}
         />
       )}
     </div>

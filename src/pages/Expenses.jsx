@@ -50,10 +50,16 @@ export default function Expenses() {
 
     filtered.sort((a, b) => {
       switch (sortBy) {
-        case 'date-desc':
-          return new Date(b.date) - new Date(a.date)
-        case 'date-asc':
-          return new Date(a.date) - new Date(b.date)
+        case 'date-desc': {
+          const byDate = new Date(b.date) - new Date(a.date)
+          if (byDate !== 0) return byDate
+          return new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+        }
+        case 'date-asc': {
+          const byDate = new Date(a.date) - new Date(b.date)
+          if (byDate !== 0) return byDate
+          return new Date(a.createdAt || 0) - new Date(b.createdAt || 0)
+        }
         case 'amount-desc':
           return parseFloat(b.amount || 0) - parseFloat(a.amount || 0)
         case 'amount-asc':
