@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useData } from '../contexts/DataContext'
 import { X } from 'lucide-react'
+import CategoryIcon from './CategoryIcon'
 import { format } from 'date-fns'
 
 const FREQUENCIES = [
@@ -146,16 +147,21 @@ export default function RecurringModal({ recurring: editingItem, onClose }) {
             <label className="block text-sm font-medium text-primary-700 dark:text-primary-300 mb-2">
               Category *
             </label>
-            <select
-              value={formData.category}
-              onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-              required
-              className="w-full px-4 py-2 rounded-lg border border-primary-300 dark:border-primary-600 bg-white dark:bg-primary-700 text-primary-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-            >
-              {categoryNames.map((cat) => (
-                <option key={cat} value={cat}>{cat}</option>
-              ))}
-            </select>
+            <div className="flex items-center gap-2">
+              {formData.category && (
+                <CategoryIcon name={formData.category} size={18} className="shrink-0 text-primary-600 dark:text-primary-400" />
+              )}
+              <select
+                value={formData.category}
+                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                required
+                className="flex-1 min-w-0 px-4 py-2 rounded-lg border border-primary-300 dark:border-primary-600 bg-white dark:bg-primary-700 text-primary-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                {categoryNames.map((cat) => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-primary-700 dark:text-primary-300 mb-2">

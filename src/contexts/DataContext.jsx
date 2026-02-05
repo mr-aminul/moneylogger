@@ -16,7 +16,54 @@ export function useData() {
   return context
 }
 
-const DEFAULT_CATEGORY_NAMES = ['Food', 'Transport', 'Rent', 'Utilities', 'Shopping', 'Others']
+// CORE CATEGORIES (15) - Default for everyone (icons rendered via CategoryIcon)
+export const CORE_CATEGORIES = [
+  { name: 'Food & Dining' },
+  { name: 'Groceries' },
+  { name: 'Transport' },
+  { name: 'Shopping' },
+  { name: 'Bills & Utilities' },
+  { name: 'Health & Medical' },
+  { name: 'Entertainment' },
+  { name: 'Education' },
+  { name: 'Personal Care' },
+  { name: 'Housing' },
+  { name: 'Family Support' },
+  { name: 'Debt & Loans' },
+  { name: 'Gifts & Events' },
+  { name: 'Subscriptions' },
+  { name: 'Others' },
+]
+
+// OPTIONAL CATEGORIES (6) - Add based on user profile
+export const OPTIONAL_CATEGORIES = [
+  { key: 'investments_savings', name: 'Investments & Savings' },
+  { key: 'travel_vacation', name: 'Travel & Vacation' },
+  { key: 'kids_baby', name: 'Kids & Baby' },
+  { key: 'pets', name: 'Pets' },
+  { key: 'business_work', name: 'Business & Work' },
+  { key: 'vehicle', name: 'Vehicle' },
+]
+
+const CORE_CATEGORY_NAMES = CORE_CATEGORIES.map((c) => c.name)
+
+// Legacy names from old defaults / user-created → canonical name (removes duplicates)
+const LEGACY_CATEGORY_MAP = {
+  'Food': 'Food & Dining',
+  'Rent': 'Housing',
+  'Utilities': 'Bills & Utilities',
+  'Health': 'Health & Medical',
+  'Insurance': 'Bills & Utilities',
+  'Investment': 'Investments & Savings',
+  'Gifts': 'Gifts & Events',
+  'Kids': 'Kids & Baby',
+  'Services': 'Others',
+  'Business': 'Business & Work',
+  'Events': 'Gifts & Events',
+  'Family support': 'Family Support',
+  'Donations': 'Gifts & Events',
+  'Income': 'Others',
+}
 
 function mapTransaction(row) {
   return {
@@ -83,16 +130,24 @@ export function DataProvider({ children }) {
   const [shoppingList, setShoppingList] = useState([])
   const [currency, setCurrencyState] = useState('USD')
   const [budgetPeriod, setBudgetPeriodState] = useState('monthly')
+  const [enabledOptionalCategories, setEnabledOptionalCategoriesState] = useState([])
   const [dataLoading, setDataLoading] = useState(true)
   const [dataError, setDataError] = useState(null)
 
   const fetchProfile = useCallback(async () => {
-    if (!user?.id) return
-    const { data } = await supabase.from('profiles').select('currency, budget_period').eq('id', user.id).single()
+    if (!user?.id) return null
+    const { data } = await supabase
+      .from('profiles')
+      .select('currency, budget_period, enabled_optional_categories')
+      .eq('id', user.id)
+      .single()
     if (data?.currency) setCurrencyState(data.currency)
     if (data?.budget_period && ['weekly', 'monthly', 'yearly'].includes(data.budget_period)) {
       setBudgetPeriodState(data.budget_period)
     }
+    const enabled = Array.isArray(data?.enabled_optional_categories) ? data.enabled_optional_categories : []
+    setEnabledOptionalCategoriesState(enabled)
+    return data
   }, [user?.id])
 
   const setCurrency = useCallback(
@@ -222,29 +277,116 @@ export function DataProvider({ children }) {
     setShoppingList((data ?? []).map(mapShoppingItem))
   }, [user?.id])
 
+  const migrateLegacyCategories = useCallback(async () => {
+    if (!user?.id) return
+    const { data: cats } = await supabase
+      .from('categories')
+      .select('id, name')
+      .eq('user_id', user.id)
+    for (const cat of cats ?? []) {
+      const newName = LEGACY_CATEGORY_MAP[cat.name]
+      if (!newName) continue
+      await supabase.from('expenses').update({ category: newName }).eq('user_id', user.id).eq('category', cat.name)
+      await supabase.from('recurring_transactions').update({ category: newName }).eq('user_id', user.id).eq('category', cat.name)
+      const { data: oldBudget } = await supabase.from('budgets').select('amount').eq('user_id', user.id).eq('category', cat.name).maybeSingle()
+      const { data: newBudget } = await supabase.from('budgets').select('amount').eq('user_id', user.id).eq('category', newName).maybeSingle()
+      await supabase.from('budgets').delete().eq('user_id', user.id).eq('category', cat.name)
+      const combined = (Number(oldBudget?.amount) || 0) + (Number(newBudget?.amount) || 0)
+      if (combined > 0) {
+        await supabase.from('budgets').upsert(
+          { user_id: user.id, category: newName, amount: combined, updated_at: new Date().toISOString() },
+          { onConflict: ['user_id', 'category'] }
+        )
+      }
+      await supabase.from('categories').delete().eq('id', cat.id).eq('user_id', user.id)
+    }
+    if ((cats ?? []).length > 0) {
+      await fetchCategories()
+      await fetchExpenses()
+      await fetchRecurring()
+      await fetchBudgets()
+    }
+  }, [user?.id, fetchCategories, fetchExpenses, fetchRecurring, fetchBudgets])
+
   const ensureDefaultCategories = useCallback(async () => {
     if (!user?.id) return
     try {
-      const { data } = await supabase
+      await migrateLegacyCategories()
+      const { data: existing } = await supabase
         .from('categories')
-        .select('id')
+        .select('name')
         .eq('user_id', user.id)
-        .limit(1)
-      if (data && data.length > 0) return
-      const { error } = await supabase.from('categories').insert(
-        DEFAULT_CATEGORY_NAMES.map((name, i) => ({
+      const existingNames = new Set((existing ?? []).map((r) => r.name))
+      const toInsert = CORE_CATEGORY_NAMES.filter((name) => !existingNames.has(name))
+      if (toInsert.length > 0) {
+        const insertPayload = toInsert.map((name) => ({
           user_id: user.id,
           name,
-          sort_order: i,
+          sort_order: CORE_CATEGORY_NAMES.indexOf(name),
         }))
-      )
-      if (error) throw error
-      await fetchCategories()
+        const { error } = await supabase.from('categories').insert(insertPayload)
+        if (error) throw error
+        await fetchCategories()
+      }
     } catch (err) {
       setDataError(err?.message ?? 'Failed to create default categories')
       setCategoriesState([])
     }
-  }, [user?.id, fetchCategories])
+  }, [user?.id, fetchCategories, migrateLegacyCategories])
+
+  const syncOptionalCategories = useCallback(
+    async (enabledKeys) => {
+      if (!user?.id) return
+      const list = await fetchCategories()
+      const categoryNames = new Set((list ?? []).map((c) => c.name))
+      const optionalByName = Object.fromEntries(OPTIONAL_CATEGORIES.map((o) => [o.name, o]))
+      const optionalByKey = Object.fromEntries(OPTIONAL_CATEGORIES.map((o) => [o.key, o]))
+      const enabledSet = new Set(Array.isArray(enabledKeys) ? enabledKeys : [])
+
+      for (const key of enabledSet) {
+        const def = optionalByKey[key]
+        if (!def || categoryNames.has(def.name)) continue
+        const { error } = await supabase.from('categories').insert({
+          user_id: user.id,
+          name: def.name,
+          sort_order: CORE_CATEGORY_NAMES.length + OPTIONAL_CATEGORIES.findIndex((o) => o.key === key),
+        })
+        if (!error) categoryNames.add(def.name)
+      }
+
+      for (const cat of list ?? []) {
+        const def = optionalByName[cat.name]
+        if (!def || enabledSet.has(def.key)) continue
+        await supabase.from('expenses').update({ category: 'Others' }).eq('user_id', user.id).eq('category', cat.name)
+        await supabase.from('recurring_transactions').update({ category: 'Others' }).eq('user_id', user.id).eq('category', cat.name)
+        await supabase.from('budgets').delete().eq('user_id', user.id).eq('category', cat.name)
+        await supabase.from('categories').delete().eq('id', cat.id).eq('user_id', user.id)
+      }
+
+      await fetchCategories()
+      await fetchExpenses()
+      await fetchBudgets()
+      await fetchRecurring()
+    },
+    [user?.id, fetchCategories, fetchExpenses, fetchBudgets, fetchRecurring]
+  )
+
+  const setEnabledOptionalCategories = useCallback(
+    async (keys) => {
+      if (!user?.id) return
+      const arr = Array.isArray(keys) ? keys : []
+      const { error } = await supabase
+        .from('profiles')
+        .upsert(
+          { id: user.id, enabled_optional_categories: arr, updated_at: new Date().toISOString() },
+          { onConflict: 'id' }
+        )
+      if (error) throw new Error(error.message)
+      setEnabledOptionalCategoriesState(arr)
+      await syncOptionalCategories(arr)
+    },
+    [user?.id, syncOptionalCategories]
+  )
 
   const addCategory = async (name, color = null) => {
     if (!user?.id) return null
@@ -319,7 +461,7 @@ export function DataProvider({ children }) {
     if (!user?.id) return
     const cat = categories.find((c) => c.id === id)
     if (!cat) throw new Error('Category not found')
-    const fallbackName = categories.find((c) => c.id !== id)?.name ?? DEFAULT_CATEGORY_NAMES[0]
+    const fallbackName = categories.find((c) => c.id !== id)?.name ?? 'Others'
     await supabase
       .from('expenses')
       .update({ category: fallbackName })
@@ -354,28 +496,32 @@ export function DataProvider({ children }) {
       setShoppingList([])
       setCurrencyState('USD')
       setBudgetPeriodState('monthly')
+      setEnabledOptionalCategoriesState([])
       setDataLoading(false)
       setDataError(null)
       return
     }
     setDataLoading(true)
     setDataError(null)
-    Promise.all([
-      fetchProfile(),
-      fetchExpenses(),
-      fetchBudgets(),
-      fetchRecurring(),
-      fetchSavingsGoals(),
-      fetchShoppingList(),
-      fetchCategories().then((list) => {
-        if (Array.isArray(list) && list.length === 0) return ensureDefaultCategories()
-      }),
-    ])
+    fetchProfile()
+      .then((profileData) =>
+        Promise.all([
+          fetchExpenses(),
+          fetchBudgets(),
+          fetchRecurring(),
+          fetchSavingsGoals(),
+          fetchShoppingList(),
+          fetchCategories().then(async () => {
+            await ensureDefaultCategories()
+            await syncOptionalCategories(profileData?.enabled_optional_categories ?? [])
+          }),
+        ])
+      )
       .catch((err) => {
         setDataError(err?.message ?? 'Failed to load data')
       })
       .finally(() => setDataLoading(false))
-  }, [user?.id, fetchProfile, fetchExpenses, fetchBudgets, fetchRecurring, fetchSavingsGoals, fetchShoppingList, fetchCategories, ensureDefaultCategories])
+  }, [user?.id, fetchProfile, fetchExpenses, fetchBudgets, fetchRecurring, fetchSavingsGoals, fetchShoppingList, fetchCategories, ensureDefaultCategories, syncOptionalCategories])
 
   const addExpense = async (expense) => {
     if (!user?.id) return null
@@ -741,6 +887,8 @@ export function DataProvider({ children }) {
         budgets,
         categories,
         categoryNames,
+        enabledOptionalCategories,
+        setEnabledOptionalCategories,
         addCategory,
         updateCategory,
         deleteCategory,

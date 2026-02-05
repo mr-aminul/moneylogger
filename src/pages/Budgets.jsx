@@ -4,6 +4,7 @@ import { useData } from '../contexts/DataContext'
 import { isWithinInterval } from 'date-fns'
 import { getPeriodRange, formatPeriodLabel } from '../lib/period'
 import { Plus, Target, AlertCircle, Trash2, ChevronRight, ArrowUpDown } from 'lucide-react'
+import CategoryIcon from '../components/CategoryIcon'
 import BudgetModal from '../components/BudgetModal'
 
 const SORT_OPTIONS = [
@@ -206,7 +207,10 @@ export default function Budgets() {
                 key={d.category}
                 className="flex justify-between items-center p-3 bg-white dark:bg-primary-800 rounded-lg"
               >
-                <span className="font-medium text-primary-900 dark:text-white">{d.category}</span>
+                <span className="font-medium text-primary-900 dark:text-white flex items-center gap-2">
+                  <CategoryIcon name={d.category} size={18} className="shrink-0 text-primary-600 dark:text-primary-400" />
+                  {d.category}
+                </span>
                 <span className="text-amber-600 dark:text-amber-400 text-sm font-medium">
                   {d.percentage.toFixed(0)}% used · {formatCurrency(d.remaining)} left
                 </span>
@@ -248,7 +252,10 @@ export default function Budgets() {
                 <div>
                   <div className="flex items-center gap-2 mb-2">
                     <h3 className="text-lg font-semibold text-primary-900 dark:text-white">
-                      {detail.category}
+                      <span className="flex items-center gap-2">
+                        <CategoryIcon name={detail.category} size={16} className="shrink-0 text-primary-600 dark:text-primary-400" />
+                        {detail.category}
+                      </span>
                     </h3>
                     {detail.exceeded && (
                       <div className="flex items-center gap-1 text-red-600 dark:text-red-400 text-sm">

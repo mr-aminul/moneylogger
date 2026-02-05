@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react'
-import { useData } from '../contexts/DataContext'
+import { useData, OPTIONAL_CATEGORIES } from '../contexts/DataContext'
 import { format, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns'
 import { FolderOpen, Plus, Pencil, Trash2, X } from 'lucide-react'
+import CategoryIcon from '../components/CategoryIcon'
 
 const PRESET_COLORS = [
   '#64748b', '#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6',
@@ -15,6 +16,8 @@ export default function Categories() {
     updateCategory,
     deleteCategory,
     formatCurrency,
+    enabledOptionalCategories,
+    setEnabledOptionalCategories,
   } = useData()
   const [showAddForm, setShowAddForm] = useState(false)
   const [newName, setNewName] = useState('')
@@ -24,6 +27,7 @@ export default function Categories() {
   const [editColor, setEditColor] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [optionalSaving, setOptionalSaving] = useState(false)
   const currentDate = new Date()
   const monthStart = startOfMonth(currentDate)
   const monthEnd = endOfMonth(currentDate)
@@ -107,6 +111,20 @@ export default function Categories() {
 
   const safeCategories = Array.isArray(categories) ? categories : []
 
+  const handleOptionalToggle = async (key) => {
+    const enabled = Array.isArray(enabledOptionalCategories) ? enabledOptionalCategories : []
+    const isEnabled = enabled.includes(key)
+    const next = isEnabled ? enabled.filter((k) => k !== key) : [...enabled, key]
+    setOptionalSaving(true)
+    try {
+      await setEnabledOptionalCategories(next)
+    } catch (err) {
+      setError(err.message ?? 'Failed to update optional categories')
+    } finally {
+      setOptionalSaving(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -116,6 +134,38 @@ export default function Categories() {
         <p className="text-sm text-primary-600 dark:text-primary-400 mt-1">
           Manage categories and view spending for {format(currentDate, 'MMMM yyyy')}
         </p>
+      </div>
+
+      {/* Optional categories - add based on your profile */}
+      <div className="bg-white dark:bg-primary-800 rounded-xl p-6 shadow-sm">
+        <h2 className="text-lg font-semibold text-primary-900 dark:text-white mb-2">
+          Optional categories
+        </h2>
+        <p className="text-sm text-primary-600 dark:text-primary-400 mb-4">
+          Add these categories if they fit your spending (e.g. investments, travel, kids, pets, business, vehicle).
+        </p>
+        <div className="flex flex-wrap gap-3">
+          {OPTIONAL_CATEGORIES.map((opt) => {
+            const isEnabled = (enabledOptionalCategories ?? []).includes(opt.key)
+            return (
+              <button
+                key={opt.key}
+                type="button"
+                disabled={optionalSaving}
+                onClick={() => handleOptionalToggle(opt.key)}
+                className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                  isEnabled
+                    ? 'bg-primary-100 dark:bg-primary-700 border-primary-300 dark:border-primary-600 text-primary-900 dark:text-white'
+                    : 'border-primary-200 dark:border-primary-600 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-700/50'
+                }`}
+              >
+                <CategoryIcon name={opt.name} size={18} className="shrink-0" aria-hidden />
+                <span>{opt.name}</span>
+                <span className="text-xs opacity-75">{isEnabled ? '✓ On' : 'Off'}</span>
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       {/* Manage categories */}
@@ -227,7 +277,10 @@ export default function Categories() {
                     ) : (
                       <FolderOpen className="w-4 h-4 text-primary-500" />
                     )}
-                    <span className="font-medium text-primary-900 dark:text-white">{cat.name}</span>
+                    <span className="font-medium text-primary-900 dark:text-white flex items-center gap-2">
+                      <CategoryIcon name={cat.name} size={18} className="shrink-0 text-primary-600 dark:text-primary-400" />
+                      {cat.name}
+                    </span>
                   </div>
                   <div className="flex gap-1">
                     <button
@@ -277,7 +330,8 @@ export default function Categories() {
                   <FolderOpen className="w-5 h-5 text-primary-600 dark:text-primary-300" />
                 )}
               </div>
-              <h3 className="text-lg font-semibold text-primary-900 dark:text-white">
+              <h3 className="text-lg font-semibold text-primary-900 dark:text-white flex items-center gap-2">
+                <CategoryIcon name={stat.category} size={20} className="shrink-0 text-primary-600 dark:text-primary-400" />
                 {stat.category}
               </h3>
             </div>

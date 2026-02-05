@@ -1,38 +1,62 @@
-import { useState, useMemo, useRef, useEffect } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useData } from '../contexts/DataContext'
 import { format, startOfMonth, endOfMonth, isWithinInterval, isSameDay } from 'date-fns'
 import { getPeriodRange, formatPeriodLabel, getDaysRemainingInPeriod } from '../lib/period'
+import { parseVoiceExpense } from '../lib/parseVoiceExpense'
 import { TrendingUp, TrendingDown, AlertCircle, DollarSign, Plus, Receipt, Calendar, HelpCircle, X } from 'lucide-react'
+import CategoryIcon from '../components/CategoryIcon'
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import ExpenseModal from '../components/ExpenseModal'
 import VoiceInputButton from '../components/UI/VoiceInputButton'
+import VoiceLanguageSwitcher from '../components/UI/VoiceLanguageSwitcher'
 
 const COLORS = ['#64748b', '#34d399', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6']
 
 export default function Dashboard() {
   const [showExpenseModal, setShowExpenseModal] = useState(false)
   const [voiceTranscript, setVoiceTranscript] = useState('')
+  const [voiceMessage, setVoiceMessage] = useState(null) // { type: 'success'|'error', text: string }
   const [showAllowanceExplanation, setShowAllowanceExplanation] = useState(false)
-  const voiceInputRef = useRef(null)
-  const { expenses, budgets, recurring, formatCurrency, budgetPeriod } = useData()
+  const { expenses, budgets, recurring, formatCurrency, budgetPeriod, categoryNames, addExpense } = useData()
+  const voiceParsed = useMemo(
+    () => parseVoiceExpense(voiceTranscript, categoryNames),
+    [voiceTranscript, categoryNames]
+  )
 
-  useEffect(() => {
-    const onKeyDown = (e) => {
-      if (e.code !== 'Space' || e.repeat) return
-      const target = document.activeElement
-      const isInput = target && (
-        target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.tagName === 'SELECT' ||
-        target.getAttribute?.('contenteditable') === 'true'
-      )
-      if (isInput) return
-      e.preventDefault()
-      voiceInputRef.current?.trigger?.()
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [])
+  // Create expense directly from voice and show success/error message
+  const handleVoiceTranscript = useCallback(
+    async (text) => {
+      if (!text?.trim()) return
+      const parsed = parseVoiceExpense(text.trim(), categoryNames)
+      const amount = parsed.amount ? parseFloat(parsed.amount) : 0
+      if (!amount || amount <= 0) {
+        setVoiceMessage({ type: 'error', text: "Couldn't detect amount. Try: \"orange juice 50\" or \"50 taka orange juice\"." })
+        setVoiceTranscript('')
+        return
+      }
+      try {
+        const dateToUse = parsed.date || format(new Date(), 'yyyy-MM-dd')
+        await addExpense({
+          title: (parsed.title || 'Expense').trim(),
+          amount,
+          category: parsed.category || 'Others',
+          date: dateToUse,
+          note: '',
+        })
+        setVoiceMessage({
+          type: 'success',
+          text: `Added: ${parsed.title || 'Expense'} — ${formatCurrency(amount)}`,
+        })
+        setVoiceTranscript('')
+      } catch (err) {
+        setVoiceMessage({ type: 'error', text: err?.message ?? 'Failed to add expense.' })
+        setVoiceTranscript('')
+      }
+      setTimeout(() => setVoiceMessage(null), 4000)
+    },
+    [categoryNames, addExpense, formatCurrency]
+  )
+
   const currentDate = new Date()
   const { start: periodStart, end: periodEnd } = getPeriodRange(budgetPeriod, currentDate)
   const periodLabel = formatPeriodLabel(budgetPeriod, currentDate)
@@ -186,6 +210,27 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      {/* Voice success/error — fixed top-center so it's always visible and noticeable */}
+      {voiceMessage && (
+        <div
+          className={`fixed top-6 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-3 rounded-xl px-4 py-3 shadow-lg border max-w-[min(420px,calc(100vw-2rem))] toast-notice ${
+            voiceMessage.type === 'success'
+              ? 'bg-emerald-100 dark:bg-emerald-900/90 text-emerald-800 dark:text-emerald-200 border-emerald-200 dark:border-emerald-800'
+              : 'bg-red-100 dark:bg-red-900/90 text-red-800 dark:text-red-200 border-red-200 dark:border-red-800'
+          }`}
+        >
+          <span className="text-sm font-medium flex-1">{voiceMessage.text}</span>
+          <button
+            type="button"
+            onClick={() => setVoiceMessage(null)}
+            className="p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 shrink-0"
+            aria-label="Dismiss"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Prominent Add Expense Section */}
       <div className="bg-gradient-to-br from-primary-900 to-primary-800 dark:from-primary-800 dark:to-primary-900 rounded-2xl p-8 shadow-lg">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
@@ -209,12 +254,9 @@ export default function Dashboard() {
               </div>
               <span>Add Expense</span>
             </button>
+            <VoiceLanguageSwitcher />
             <VoiceInputButton
-              ref={voiceInputRef}
-              onOpenWithTranscript={(text) => {
-                setVoiceTranscript(text)
-                setShowExpenseModal(true)
-              }}
+              onOpenWithTranscript={handleVoiceTranscript}
               size="lg"
               variant="secondary"
               className="shrink-0"
@@ -589,7 +631,10 @@ export default function Dashboard() {
                 key={category}
                 className="flex justify-between items-center p-3 bg-primary-100 dark:bg-primary-700 rounded-lg"
               >
-                <span className="font-medium text-primary-900 dark:text-white">{category}</span>
+                <span className="font-medium text-primary-900 dark:text-white flex items-center gap-2">
+                  <CategoryIcon name={category} size={18} className="shrink-0 text-primary-600 dark:text-primary-400" />
+                  {category}
+                </span>
                 <span className="text-amber-600 dark:text-amber-400 text-sm font-medium">
                   {status.percentage.toFixed(0)}% used · {formatCurrency(status.remaining)} left
                 </span>
@@ -614,7 +659,10 @@ export default function Dashboard() {
                   key={category}
                   className="flex justify-between items-center p-3 bg-primary-100 dark:bg-primary-700 rounded-lg"
                 >
-                  <span className="font-medium text-primary-900 dark:text-white">{category}</span>
+                  <span className="font-medium text-primary-900 dark:text-white flex items-center gap-2">
+                    <CategoryIcon name={category} size={18} className="shrink-0 text-primary-600 dark:text-primary-400" />
+                    {category}
+                  </span>
                   <span className="text-red-600 dark:text-red-400 font-medium">
                     Over by {formatCurrency(Math.abs(status.remaining))}
                   </span>
@@ -652,7 +700,9 @@ export default function Dashboard() {
           transaction={null}
           type="expense"
           onClose={() => { setShowExpenseModal(false); setVoiceTranscript(''); }}
-          initialTitle={voiceTranscript}
+          initialTitle={voiceParsed.title}
+          initialAmount={voiceParsed.amount}
+          initialCategory={voiceParsed.category}
         />
       )}
     </div>

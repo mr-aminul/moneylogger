@@ -14,6 +14,7 @@ import Settings from './pages/Settings.jsx'
 import MainLayout from './components/Layout/MainLayout.jsx'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { DataProvider } from './contexts/DataContext'
+import { VoiceLanguageProvider } from './contexts/VoiceLanguageContext'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -73,9 +74,11 @@ function App() {
   return (
     <AuthProvider>
       <DataProvider>
-        <Router>
-          <AppRoutes />
-        </Router>
+        <VoiceLanguageProvider>
+          <Router>
+            <AppRoutes />
+          </Router>
+        </VoiceLanguageProvider>
       </DataProvider>
     </AuthProvider>
   )

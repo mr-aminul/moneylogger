@@ -1,8 +1,16 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useData } from '../contexts/DataContext'
 import { X, Link2 } from 'lucide-react'
+import CategoryIcon from './CategoryIcon'
 
-export default function ExpenseModal({ transaction, type = 'expense', onClose, initialTitle = '' }) {
+export default function ExpenseModal({
+  transaction,
+  type = 'expense',
+  onClose,
+  initialTitle = '',
+  initialAmount = '',
+  initialCategory = '',
+}) {
   const { addExpense, addIncome, updateExpense, categoryNames, findMatchingUpcomingForExpense } = useData()
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -27,10 +35,19 @@ export default function ExpenseModal({ transaction, type = 'expense', onClose, i
         date: transaction.date || new Date().toISOString().split('T')[0],
         note: transaction.note || '',
       })
-    } else if (initialTitle) {
-      setFormData((prev) => ({ ...prev, title: initialTitle }))
+    } else if (initialTitle || initialAmount || initialCategory) {
+      const validCategory =
+        initialCategory && categoryNames.includes(initialCategory)
+          ? initialCategory
+          : categoryNames[0] || ''
+      setFormData((prev) => ({
+        ...prev,
+        ...(initialTitle && { title: initialTitle }),
+        ...(initialAmount && { amount: String(initialAmount) }),
+        ...(validCategory && { category: validCategory }),
+      }))
     }
-  }, [transaction, categoryNames, initialTitle])
+  }, [transaction, categoryNames, initialTitle, initialAmount, initialCategory])
 
   const handleSubmit = async (e, linkedRecurringId = null) => {
     e.preventDefault()
@@ -152,16 +169,21 @@ export default function ExpenseModal({ transaction, type = 'expense', onClose, i
               <label className="block text-base font-semibold text-primary-700 dark:text-primary-300 mb-3">
                 Category *
               </label>
-              <select
-                value={formData.category}
-                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                required
-                className="w-full px-5 py-4 text-lg rounded-xl border-2 border-primary-300 dark:border-primary-600 bg-white dark:bg-primary-700 text-primary-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              >
-                {categoryNames.map((cat) => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
+              <div className="flex items-center gap-3">
+                {formData.category && (
+                  <CategoryIcon name={formData.category} size={22} className="shrink-0 text-primary-600 dark:text-primary-400" />
+                )}
+                <select
+                  value={formData.category}
+                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                  required
+                  className="flex-1 min-w-0 px-5 py-4 text-lg rounded-xl border-2 border-primary-300 dark:border-primary-600 bg-white dark:bg-primary-700 text-primary-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                >
+                  {categoryNames.map((cat) => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
 

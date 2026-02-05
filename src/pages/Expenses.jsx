@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { useData } from '../contexts/DataContext'
 import { format, parseISO } from 'date-fns'
 import { Plus, Search, Filter, Edit2, Trash2, Download } from 'lucide-react'
+import CategoryIcon from '../components/CategoryIcon'
 import ExpenseModal from '../components/ExpenseModal'
 import Button from '../components/UI/Button'
 
@@ -161,16 +162,21 @@ export default function Expenses() {
             />
           </div>
 
-          <select
-            value={filterCategory}
-            onChange={(e) => setFilterCategory(e.target.value)}
-            className="px-4 py-2 rounded-lg border border-primary-300 dark:border-primary-600 bg-white dark:bg-primary-700 text-primary-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-          >
-            <option value="">All Categories</option>
-            {categories.map((cat) => (
-              <option key={cat} value={cat}>{cat}</option>
-            ))}
-          </select>
+          <div className="flex items-center gap-2">
+            {filterCategory && (
+              <CategoryIcon name={filterCategory} size={18} className="shrink-0 text-primary-600 dark:text-primary-400" />
+            )}
+            <select
+              value={filterCategory}
+              onChange={(e) => setFilterCategory(e.target.value)}
+              className="px-4 py-2 rounded-lg border border-primary-300 dark:border-primary-600 bg-white dark:bg-primary-700 text-primary-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="">All Categories</option>
+              {categories.map((cat) => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+          </div>
 
           <input
             type="date"
@@ -246,7 +252,10 @@ function ExpenseRow({ expense, formatCurrency, onEdit, onDelete }) {
             {expense.title || 'Untitled Expense'}
           </h3>
           <span className="px-2 py-1 text-xs font-medium rounded bg-primary-100 dark:bg-primary-700 text-primary-700 dark:text-primary-300">
-            {expense.category || 'Others'}
+            <span className="flex items-center gap-2">
+              <CategoryIcon name={expense.category} size={16} className="shrink-0 text-primary-600 dark:text-primary-400" />
+              {expense.category || 'Others'}
+            </span>
           </span>
         </div>
         <div className="flex items-center gap-4 text-sm text-primary-600 dark:text-primary-400">
