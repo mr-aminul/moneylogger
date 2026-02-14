@@ -46,6 +46,7 @@ export const OPTIONAL_CATEGORIES = [
 ]
 
 const CORE_CATEGORY_NAMES = CORE_CATEGORIES.map((c) => c.name)
+const ALL_CANONICAL_NAMES = [...CORE_CATEGORY_NAMES, ...OPTIONAL_CATEGORIES.map((o) => o.name)]
 
 // Legacy names from old defaults / user-created → canonical name (removes duplicates)
 const LEGACY_CATEGORY_MAP = {
@@ -65,13 +66,23 @@ const LEGACY_CATEGORY_MAP = {
   'Income': 'Others',
 }
 
+/** Normalize category to a single canonical form (avoids duplicates like "Family support" vs "Family Support"). */
+function getCanonicalCategory(cat) {
+  const raw = (cat || '').trim()
+  if (!raw) return 'Others'
+  const fromLegacy = LEGACY_CATEGORY_MAP[raw]
+  if (fromLegacy) return fromLegacy
+  const found = ALL_CANONICAL_NAMES.find((c) => c.toLowerCase().trim() === raw.toLowerCase())
+  return found ?? (raw || 'Others')
+}
+
 function mapTransaction(row) {
   return {
     id: row.id,
     type: row.type === 'income' ? 'income' : 'expense',
     title: row.title ?? '',
     amount: parseFloat(row.amount) ?? 0,
-    category: row.category ?? 'Others',
+    category: getCanonicalCategory(row.category ?? 'Others'),
     date: row.date,
     note: row.note ?? '',
     createdAt: row.created_at,
@@ -84,7 +95,7 @@ function mapRecurring(row) {
     id: row.id,
     title: row.title ?? '',
     amount: parseFloat(row.amount) ?? 0,
-    category: row.category ?? 'Others',
+    category: getCanonicalCategory(row.category ?? 'Others'),
     type: row.type === 'income' ? 'income' : 'expense',
     frequency: row.frequency ?? 'monthly',
     nextDate: row.next_date,
@@ -530,7 +541,7 @@ export function DataProvider({ children }) {
       type: 'expense',
       title: expense.title ?? '',
       amount: parseFloat(expense.amount) ?? 0,
-      category: expense.category ?? 'Others',
+      category: getCanonicalCategory(expense.category ?? 'Others'),
       date: expense.date,
       note: expense.note ?? '',
     }
@@ -557,7 +568,7 @@ export function DataProvider({ children }) {
         type: 'income',
         title: income.title ?? '',
         amount: parseFloat(income.amount) ?? 0,
-        category: income.category ?? 'Others',
+        category: 'Income',
         date: income.date,
         note: income.note ?? '',
       })
@@ -571,10 +582,13 @@ export function DataProvider({ children }) {
 
   const updateExpense = async (id, updates) => {
     if (!user?.id) return
+    const existing = expenses.find((e) => e.id === id)
+    const isIncome = existing?.type === 'income'
     const payload = {
       ...(updates.title !== undefined && { title: updates.title }),
       ...(updates.amount !== undefined && { amount: parseFloat(updates.amount) }),
-      ...(updates.category !== undefined && { category: updates.category }),
+      ...(updates.category !== undefined && !isIncome && { category: getCanonicalCategory(updates.category) }),
+      ...(isIncome && { category: 'Income' }),
       ...(updates.date !== undefined && { date: updates.date }),
       ...(updates.note !== undefined && { note: updates.note }),
       ...(updates.type !== undefined && { type: updates.type }),
@@ -604,18 +618,19 @@ export function DataProvider({ children }) {
 
   const setBudget = async (category, amount) => {
     if (!user?.id) return
+    const canonical = getCanonicalCategory(category)
     const num = parseFloat(amount) ?? 0
     const { error } = await supabase.from('budgets').upsert(
       {
         user_id: user.id,
-        category,
+        category: canonical,
         amount: num,
         updated_at: new Date().toISOString(),
       },
       { onConflict: ['user_id', 'category'] }
     )
     if (error) throw new Error(error.message)
-    setBudgets((prev) => ({ ...prev, [category]: num }))
+    setBudgets((prev) => ({ ...prev, [canonical]: num }))
   }
 
   const deleteBudget = async (category) => {
@@ -635,14 +650,15 @@ export function DataProvider({ children }) {
 
   const addRecurring = async (item) => {
     if (!user?.id) return null
+    const isIncome = item.type === 'income'
     const { data, error } = await supabase
       .from('recurring_transactions')
       .insert({
         user_id: user.id,
         title: item.title ?? '',
         amount: parseFloat(item.amount) ?? 0,
-        category: item.category ?? 'Others',
-        type: item.type === 'income' ? 'income' : 'expense',
+        category: isIncome ? 'Income' : getCanonicalCategory(item.category ?? 'Others'),
+        type: isIncome ? 'income' : 'expense',
         frequency: item.frequency ?? 'monthly',
         next_date: item.nextDate,
         note: item.note ?? '',
@@ -658,11 +674,13 @@ export function DataProvider({ children }) {
 
   const updateRecurring = async (id, updates) => {
     if (!user?.id) return
+    const isIncome = updates.type === 'income' || recurring.find((r) => r.id === id)?.type === 'income'
     const payload = {
       updated_at: new Date().toISOString(),
       ...(updates.title !== undefined && { title: updates.title }),
       ...(updates.amount !== undefined && { amount: parseFloat(updates.amount) }),
-      ...(updates.category !== undefined && { category: updates.category }),
+      ...(updates.category !== undefined && !isIncome && { category: getCanonicalCategory(updates.category) }),
+      ...(isIncome && { category: 'Income' }),
       ...(updates.type !== undefined && { type: updates.type }),
       ...(updates.frequency !== undefined && { frequency: updates.frequency }),
       ...(updates.nextDate !== undefined && { next_date: updates.nextDate }),

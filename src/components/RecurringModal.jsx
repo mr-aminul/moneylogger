@@ -27,10 +27,11 @@ export default function RecurringModal({ recurring: editingItem, onClose }) {
   useEffect(() => {
     const today = format(new Date(), 'yyyy-MM-dd')
     if (editingItem) {
+      const isIncomeItem = editingItem.type === 'income'
       setFormData({
         title: editingItem.title ?? '',
         amount: String(editingItem.amount ?? ''),
-        category: editingItem.category ?? 'Others',
+        category: isIncomeItem ? 'Income' : (editingItem.category ?? 'Others'),
         type: editingItem.type ?? 'expense',
         frequency: editingItem.frequency ?? 'monthly',
         nextDate: editingItem.nextDate ?? today,
@@ -45,6 +46,7 @@ export default function RecurringModal({ recurring: editingItem, onClose }) {
     }
   }, [editingItem, categoryNames])
 
+  const isIncome = formData.type === 'income'
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
@@ -52,11 +54,12 @@ export default function RecurringModal({ recurring: editingItem, onClose }) {
     try {
       const amount = parseFloat(formData.amount)
       if (Number.isNaN(amount) || amount < 0) throw new Error('Enter a valid amount')
+      const category = isIncome ? 'Income' : formData.category
       if (editingItem) {
         await updateRecurring(editingItem.id, {
           title: formData.title.trim(),
           amount,
-          category: formData.category,
+          category,
           type: formData.type,
           frequency: formData.frequency,
           nextDate: formData.nextDate,
@@ -66,7 +69,7 @@ export default function RecurringModal({ recurring: editingItem, onClose }) {
         await addRecurring({
           title: formData.title.trim(),
           amount,
-          category: formData.category,
+          category,
           type: formData.type,
           frequency: formData.frequency,
           nextDate: formData.nextDate,
@@ -121,7 +124,14 @@ export default function RecurringModal({ recurring: editingItem, onClose }) {
             </label>
             <select
               value={formData.type}
-              onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+              onChange={(e) => {
+                const newType = e.target.value
+                setFormData((prev) => ({
+                  ...prev,
+                  type: newType,
+                  category: newType === 'income' ? 'Income' : (categoryNames[0] || 'Others'),
+                }))
+              }}
               className="w-full px-4 py-2 rounded-lg border border-primary-300 dark:border-primary-600 bg-white dark:bg-primary-700 text-primary-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
             >
               <option value="expense">Expense</option>
@@ -143,6 +153,7 @@ export default function RecurringModal({ recurring: editingItem, onClose }) {
               placeholder="0.00"
             />
           </div>
+          {!isIncome && (
           <div>
             <label className="block text-sm font-medium text-primary-700 dark:text-primary-300 mb-2">
               Category *
@@ -163,6 +174,7 @@ export default function RecurringModal({ recurring: editingItem, onClose }) {
               </select>
             </div>
           </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-primary-700 dark:text-primary-300 mb-2">
               Frequency

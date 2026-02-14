@@ -91,7 +91,9 @@ export default function Dashboard() {
       const category = exp.category || 'Others'
       breakdown[category] = (breakdown[category] || 0) + parseFloat(exp.amount || 0)
     })
-    return Object.entries(breakdown).map(([name, value]) => ({ name, value }))
+    return Object.entries(breakdown)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
   }, [periodExpenses])
 
   const largestCategory = useMemo(() => {

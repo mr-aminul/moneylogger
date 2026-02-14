@@ -6,11 +6,10 @@ import ExpenseModal from '../components/ExpenseModal'
 import Button from '../components/UI/Button'
 
 export default function Income() {
-  const { expenses, deleteExpense, categoryNames: categories, formatCurrency } = useData()
+  const { expenses, deleteExpense, formatCurrency } = useData()
   const [showModal, setShowModal] = useState(false)
   const [editingItem, setEditingItem] = useState(null)
   const [searchQuery, setSearchQuery] = useState('')
-  const [filterCategory, setFilterCategory] = useState('')
   const [filterDateFrom, setFilterDateFrom] = useState('')
   const [filterDateTo, setFilterDateTo] = useState('')
   const [sortBy, setSortBy] = useState('date-desc')
@@ -27,7 +26,6 @@ export default function Income() {
           t.title?.toLowerCase().includes(query) || t.note?.toLowerCase().includes(query)
       )
     }
-    if (filterCategory) filtered = filtered.filter((t) => t.category === filterCategory)
     if (filterDateFrom) filtered = filtered.filter((t) => t.date >= filterDateFrom)
     if (filterDateTo) filtered = filtered.filter((t) => t.date <= filterDateTo)
 
@@ -46,7 +44,7 @@ export default function Income() {
       }
     })
     return filtered
-  }, [incomeEntries, searchQuery, filterCategory, filterDateFrom, filterDateTo, sortBy])
+  }, [incomeEntries, searchQuery, filterDateFrom, filterDateTo, sortBy])
 
   const totalAmount = filteredIncome.reduce(
     (sum, t) => sum + parseFloat(t.amount || 0),
@@ -75,12 +73,11 @@ export default function Income() {
 
   const handleExport = () => {
     const csv = [
-      ['Date', 'Title', 'Category', 'Amount', 'Note'].join(','),
+      ['Date', 'Title', 'Amount', 'Note'].join(','),
       ...filteredIncome.map((t) =>
         [
           t.date,
           `"${t.title || ''}"`,
-          t.category || '',
           t.amount || 0,
           `"${t.note || ''}"`,
         ].join(',')
@@ -118,7 +115,7 @@ export default function Income() {
 
       <div className="bg-white dark:bg-primary-800 rounded-xl p-6 shadow-sm">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          <div className="relative">
+          <div className="relative md:col-span-2">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-primary-400" />
             <input
               type="text"
@@ -128,16 +125,6 @@ export default function Income() {
               className="w-full pl-10 pr-4 py-2 rounded-lg border border-primary-300 dark:border-primary-600 bg-white dark:bg-primary-700 text-primary-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
           </div>
-          <select
-            value={filterCategory}
-            onChange={(e) => setFilterCategory(e.target.value)}
-            className="px-4 py-2 rounded-lg border border-primary-300 dark:border-primary-600 bg-white dark:bg-primary-700 text-primary-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-          >
-            <option value="">All Categories</option>
-            {categories.map((cat) => (
-              <option key={cat} value={cat}>{cat}</option>
-            ))}
-          </select>
           <input
             type="date"
             value={filterDateFrom}
@@ -202,15 +189,10 @@ export default function Income() {
 function IncomeRow({ item, formatCurrency, onEdit, onDelete }) {
   return (
     <div className="flex items-center justify-between p-4 rounded-lg border border-primary-200 dark:border-primary-700 hover:bg-primary-50 dark:hover:bg-primary-700/50 transition-colors">
-      <div className="flex-1">
-        <div className="flex items-center gap-3 mb-1">
-          <h3 className="font-semibold text-primary-900 dark:text-white">
-            {item.title || 'Untitled'}
-          </h3>
-          <span className="px-2 py-1 text-xs font-medium rounded bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">
-            {item.category || 'Others'}
-          </span>
-        </div>
+        <div className="flex-1">
+        <h3 className="font-semibold text-primary-900 dark:text-white mb-1">
+          {item.title || 'Untitled'}
+        </h3>
         <div className="flex items-center gap-4 text-sm text-primary-600 dark:text-primary-400">
           <span>{format(parseISO(item.date), 'MMM dd, yyyy')}</span>
           {item.note && <span className="truncate max-w-md">{item.note}</span>}
